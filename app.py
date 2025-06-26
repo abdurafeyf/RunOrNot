@@ -2,8 +2,7 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from dateutil import parser
-import matplotlib.pyplot as plt
-import pytz
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Running Weather Advisor", layout="centered")
 st.title("🏃 Running Weather Advisor")
@@ -13,7 +12,6 @@ st.subheader("📍 Location Detection")
 city_name = st.text_input("Enter City (or leave blank to auto-detect via IP)", "")
 
 if city_name:
-    # Use OpenCage or Nominatim for geocoding (this uses Open-Meteo built-in geocoding)
     geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city_name}&count=1"
     geo_res = requests.get(geo_url).json()
     if "results" in geo_res and len(geo_res["results"]) > 0:
@@ -61,7 +59,6 @@ if st.button("Check Running Conditions"):
                   + 0.000725*T*RH*RH - 0.00000358*T*T*RH*RH)
             return round(HI, 1)
 
-        # --- Current weather ---
         now = parser.parse(data["current_weather"]["time"])
         closest_idx = min(range(len(times)), key=lambda i: abs(times[i] - now))
         current_temp = temp_series[closest_idx]
@@ -87,7 +84,6 @@ if st.button("Check Running Conditions"):
         st.info(advice)
         st.warning(f"🎒 Gear Suggestion: {gear}")
 
-        # --- AQI ---
         if "hourly" in aqi_res:
             pm2_5 = aqi_res["hourly"]["pm2_5"][closest_idx]
             pm10 = aqi_res["hourly"]["pm10"][closest_idx]
@@ -99,7 +95,6 @@ if st.button("Check Running Conditions"):
             else:
                 st.success("Air quality is acceptable for running.")
 
-        # --- Best Time to Run Today ---
         st.subheader("🕒 Best Time to Run Today")
         today = now.date()
         safe_times = []
@@ -117,13 +112,11 @@ if st.button("Check Running Conditions"):
                     windows.append((start, safe_times[i-1]))
                     start = safe_times[i]
             windows.append((start, safe_times[-1]))
-
             best = max(windows, key=lambda w: (w[1] - w[0]).seconds)
             st.success(f"Best Window: {best[0].strftime('%H:%M')}–{best[1].strftime('%H:%M')}")
         else:
             st.warning("No optimal time found today. Try early morning tomorrow.")
 
-        # --- 3-Day Planner ---
         st.subheader("📅 3-Day Running Planner")
         planner = {}
         for i, t in enumerate(times):
@@ -140,18 +133,12 @@ if st.button("Check Running Conditions"):
             else:
                 st.warning(f"{day}: No safe running time")
 
-        # --- Heat Index Forecast Chart ---
         st.subheader("📈 Heat Index Forecast")
         next_24h = times[closest_idx:closest_idx+24]
         next_hi = [compute_heat_index(temp_series[i], humid_series[i]) for i in range(closest_idx, closest_idx+24)]
-        fig, ax = plt.subplots()
-        ax.plot([t.strftime("%H:%M") for t in next_24h], next_hi, label="Heat Index", color="tomato")
-        ax.set_xlabel("Hour")
-        ax.set_ylabel("Heat Index (°C)")
-        ax.set_title("Next 24h Heat Index")
-        ax.grid(True)
-        ax.legend()
-        st.pyplot(fig)
-
+        chart = go.Figure()
+        chart.add_trace(go.Scatter(x=[t.strftime("%H:%M") for t in next_24h], y=next_hi, mode='lines+markers', name='Heat Index', line=dict(color='tomato')))
+        chart.update_layout(title="Next 24h Heat Index", xaxis_title="Hour", yaxis_title="Heat Index (°C)", template="plotly_white")
+        st.plotly_chart(chart)
     else:
         st.error("Failed to fetch weather data.")
